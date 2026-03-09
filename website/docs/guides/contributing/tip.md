@@ -1,30 +1,26 @@
 # Misc Tips
 
-## How to add a test
+## AI Assistant Skills
 
-:::info
-This package has some scripts to automatically create more tests based on the test you write,
-so you write one test and get (usually) six tests ;)
-
-That's why adding a test seems slightly more complex than usual - but surely quicker than manually writing 6 tests.
-:::
-
-1. In `./frb_example/pure_dart`,
-add your test in (for example) `rust/src/api/whatever.rs` and `test/api/whatever_test.dart`.
-2. Remember to mimic existing tests and add `_twin_normal`/`TwinNormal`/etc as appropriate (this allows more "twin" tests to be generated).
-3. Run `./frb_internal precommit --mode slow`, or if that's too slow,
-run `./frb_internal generate-internal-frb-example-pure-dart && ./frb_internal generate-run-frb-codegen-command-generate --package frb_example/pure_dart`
-
-## How to solve failed CI
-
-* **When it is merely flaky**: Sometimes it is just flaky, not real bug. Thus, try to re-run the CI jobs
-(e.g. by pushing a commit that does no real work in order to trigger the CI) and see.
-* **Quickly solve git-diff errors**: If the CI is unhappy and provide you git diffs,
-you can either run code generator locally, or directly *copy-and-paste* and `git apply` those diffs to fix your code.
-* **How to reproduce locally**: Operations are usually reproducible using corresponding `./frb_internal something` commands shown in CI.
-* **Automatic fix commands**: For many `./frb_internal` commands, there is a `--fix` option which tries to automatically fix everything.
+For common development workflows, see the skills in `.claude/skills/`.
 
 ## Tips for development
+
+### Docker and devcontainer
+
+Optionally, you can use Docker and/or devcontainer to quickly get a standardized development environment. The related code is in `.devcontainer`.
+
+The published development image is `fzyzcjy/flutter_rust_bridge_dev`. It packages the Flutter + Rust toolchain used for flutter_rust_bridge development, including the nightly toolchain, `wasm-pack`, and Chromium for web testing.
+
+Prefer the full version tag when you want reproducible environments:
+
+```shell
+docker run --rm -it fzyzcjy/flutter_rust_bridge_dev:flutter-3.27.4-rust-1.88.0-nightly-2025-02-01 bash
+```
+
+Those version numbers are derived from the `ARG` values in `.devcontainer/Dockerfile`, which is the single source of truth. `latest` only means the current recommended image and is not intended for long-term reproducibility.
+
+The default devcontainer configuration still builds locally from `.devcontainer/Dockerfile`. If you want to use the prebuilt image manually, use the full version tag above or regenerate it from the current Dockerfile args after version bumps.
 
 ### The `./frb_internal`
 
@@ -37,21 +33,6 @@ For example, `./frb_internal precommit --mode fast` (or `--mode slow`) runs code
 
 To run the `flutter_rust_bridge_codegen`, but using the local code (instead of a released version),
 please replace it with `just codegen`.
-
-### Check the dumped data
-
-With `dump_all: true` in the config (which is already done for `frb_example/pure_dart`),
-many things are dumped into the `rust/target/frb_dump/` folder,
-which is often helpful for debugging the codegen.
-For example, you can check the effective configuration, the IR (intermediate representation),
-the generated spec, the generated code, etc.
-
-### Use `frb_example/dart_minimal` as testing bed
-
-A lot of tests reside in `frb_example/pure_dart`, thus it is a bit big and slow to compile and examine.
-Therefore, I (personally) often use `frb_example/dart_minimal` as a testing bed.
-
-For example, I will ad-hoc add one or two functions to dart_minimal when wanting to examine outputs and behavior.
 
 ## Draw a flamegraph for performance
 
