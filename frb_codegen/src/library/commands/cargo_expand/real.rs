@@ -20,8 +20,29 @@ pub(super) fn run(
     features: Option<&[String]>,
 ) -> Result<syn::File> {
     let text = run_with_frb_aware(rust_crate_dir, interest_crate_name, features)?;
+    let text = fixup_expanded_code(&text);
     (dumper.with_content(ConfigDumpContent::Source)).dump_str("cargo_expand.rs", &text)?;
     Ok(syn::parse_file(&text)?)
+}
+
+/// Patch cargo-expand output so that syn (stable) can parse it.
+///
+/// Newer rustc versions emit constructs in macro expansions that are valid
+/// internally but not parseable by syn on stable Rust:
+///
+/// 1. **Hygiene suffixes** — e.g. `_serde::__private228::Result` (numeric
+///    span-disambiguation suffixes on identifiers).
+/// 2. **`super let`** — used by `pin!()` since Rust 1.84+ (RFC 3856).
+///    syn doesn't understand this keyword combination.
+fn fixup_expanded_code(code: &str) -> String {
+    lazy_static! {
+        static ref HYGIENE_SUFFIX: Regex =
+            Regex::new(r"__private(\d+)").unwrap();
+        static ref SUPER_LET: Regex =
+            Regex::new(r"\bsuper\s+let\b").unwrap();
+    }
+    let code = HYGIENE_SUFFIX.replace_all(code, "__private");
+    SUPER_LET.replace_all(&code, "let").into_owned()
 }
 
 fn run_with_frb_aware(
