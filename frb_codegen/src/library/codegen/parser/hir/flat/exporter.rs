@@ -35,7 +35,8 @@ impl HirFlatPack {
     /// Returns the names of traits that are marked with #[frb(ignore)].
     /// Used to properly handle trait object types for ignored traits.
     pub(crate) fn ignored_trait_names(&self) -> std::collections::HashSet<String> {
-        let ignored: std::collections::HashSet<_> = self.traits
+        let ignored: std::collections::HashSet<_> = self
+            .traits
             .iter()
             .filter(|t| {
                 FrbAttributes::parse(&t.attrs)
@@ -55,14 +56,22 @@ impl HirFlatPack {
         // Generic type aliases are handled separately via generic_types_map()
         // to support proper generic parameter substitution.
         vec_to_map_with_warn(
-            &self.types.iter().filter(|x| x.generics.is_none()).collect::<Vec<_>>(),
+            &self
+                .types
+                .iter()
+                .filter(|x| x.generics.is_none())
+                .collect::<Vec<_>>(),
             |x| (x.ident.clone(), x.target.clone()),
         )
     }
 
     pub(crate) fn generic_types_map(&self) -> HashMap<String, &HirFlatTypeAlias> {
         vec_to_map_with_warn(
-            &self.types.iter().filter(|x| x.generics.is_some()).collect::<Vec<_>>(),
+            &self
+                .types
+                .iter()
+                .filter(|x| x.generics.is_some())
+                .collect::<Vec<_>>(),
             |x| (x.ident.clone(), *x),
         )
     }

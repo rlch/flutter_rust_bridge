@@ -36,10 +36,8 @@ pub(super) fn run(
 ///    syn doesn't understand this keyword combination.
 fn fixup_expanded_code(code: &str) -> String {
     lazy_static! {
-        static ref HYGIENE_SUFFIX: Regex =
-            Regex::new(r"__private(\d+)").unwrap();
-        static ref SUPER_LET: Regex =
-            Regex::new(r"\bsuper\s+let\b").unwrap();
+        static ref HYGIENE_SUFFIX: Regex = Regex::new(r"__private(\d+)").unwrap();
+        static ref SUPER_LET: Regex = Regex::new(r"\bsuper\s+let\b").unwrap();
     }
     let code = HYGIENE_SUFFIX.replace_all(code, "__private");
     SUPER_LET.replace_all(&code, "let").into_owned()

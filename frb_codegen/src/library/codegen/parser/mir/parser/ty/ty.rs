@@ -49,32 +49,32 @@ impl TypeParserWithContext<'_, '_, '_> {
         if let Some(resolved) = self.get_alias_type(ty) {
             return resolved.clone();
         }
-        
+
         // Then try generic alias resolution
         if let Some(resolved) = self.resolve_generic_alias(ty) {
             return resolved;
         }
-        
+
         ty.clone()
     }
 
     fn get_alias_type(&self, ty: &Type) -> Option<&Type> {
         convert_ident_str(ty).and_then(|key| self.inner.src_types.get(&key))
     }
-    
+
     /// Resolve a generic type alias like `WResult<Uuid>` to `std::result::Result<Uuid, MyError>`
     fn resolve_generic_alias(&self, ty: &Type) -> Option<Type> {
         let Type::Path(TypePath { qself: None, path }) = ty else {
             return None;
         };
-        
+
         // Get the last segment which has the type name and generic args
         let last_segment = path.segments.last()?;
         let type_name = last_segment.ident.to_string();
-        
+
         // Look up the generic type alias
         let alias = self.inner.src_generic_types.get(&type_name)?;
-        
+
         // Extract provided generic arguments
         let PathArguments::AngleBracketed(provided_args) = &last_segment.arguments else {
             return None;
@@ -90,7 +90,7 @@ impl TypeParserWithContext<'_, '_, '_> {
                 }
             })
             .collect();
-        
+
         // Get generic parameter names from the alias definition
         let generics = alias.generics.as_ref()?;
         let param_names: Vec<String> = generics
@@ -104,18 +104,16 @@ impl TypeParserWithContext<'_, '_, '_> {
                 }
             })
             .collect();
-        
+
         // Parameter count must match
         if param_names.len() != provided_types.len() {
             return None;
         }
-        
+
         // Build substitution map: T -> actual_type
-        let param_map: HashMap<String, &Type> = param_names
-            .into_iter()
-            .zip(provided_types)
-            .collect();
-        
+        let param_map: HashMap<String, &Type> =
+            param_names.into_iter().zip(provided_types).collect();
+
         // Substitute in the target type
         Some(substitute_type_params(&alias.target, &param_map))
     }
@@ -135,25 +133,28 @@ fn substitute_type_params(ty: &Type, param_map: &HashMap<String, &Type>) -> Type
                     }
                 }
             }
-            
+
             // Otherwise, recursively substitute in path segments
-            let new_segments: syn::punctuated::Punctuated<syn::PathSegment, syn::token::PathSep> = 
+            let new_segments: syn::punctuated::Punctuated<syn::PathSegment, syn::token::PathSep> =
                 path.segments
                     .iter()
                     .map(|seg| {
                         let new_args = match &seg.arguments {
                             PathArguments::None => PathArguments::None,
                             PathArguments::AngleBracketed(args) => {
-                                let new_args: syn::punctuated::Punctuated<GenericArgument, syn::token::Comma> = 
-                                    args.args
-                                        .iter()
-                                        .map(|arg| match arg {
-                                            GenericArgument::Type(t) => {
-                                                GenericArgument::Type(substitute_type_params(t, param_map))
-                                            }
-                                            other => other.clone(),
-                                        })
-                                        .collect();
+                                let new_args: syn::punctuated::Punctuated<
+                                    GenericArgument,
+                                    syn::token::Comma,
+                                > = args
+                                    .args
+                                    .iter()
+                                    .map(|arg| match arg {
+                                        GenericArgument::Type(t) => GenericArgument::Type(
+                                            substitute_type_params(t, param_map),
+                                        ),
+                                        other => other.clone(),
+                                    })
+                                    .collect();
                                 PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
                                     colon2_token: args.colon2_token,
                                     lt_token: args.lt_token,
@@ -171,7 +172,7 @@ fn substitute_type_params(ty: &Type, param_map: &HashMap<String, &Type>) -> Type
                         }
                     })
                     .collect();
-            
+
             Type::Path(TypePath {
                 qself: qself.clone(),
                 path: syn::Path {
@@ -188,7 +189,11 @@ fn substitute_type_params(ty: &Type, param_map: &HashMap<String, &Type>) -> Type
         }),
         Type::Tuple(t) => Type::Tuple(syn::TypeTuple {
             paren_token: t.paren_token,
-            elems: t.elems.iter().map(|e| substitute_type_params(e, param_map)).collect(),
+            elems: t
+                .elems
+                .iter()
+                .map(|e| substitute_type_params(e, param_map))
+                .collect(),
         }),
         Type::Array(a) => Type::Array(syn::TypeArray {
             bracket_token: a.bracket_token,
@@ -209,46 +214,46 @@ fn substitute_type_params(ty: &Type, param_map: &HashMap<String, &Type>) -> Type
 mod tests {
     use super::*;
     use quote::ToTokens;
-    
+
     #[test]
     fn test_substitute_type_params_simple() {
         let ty: Type = syn::parse_str("T").unwrap();
         let uuid_type: Type = syn::parse_str("Uuid").unwrap();
         let mut param_map = HashMap::new();
         param_map.insert("T".to_string(), &uuid_type);
-        
+
         let result = substitute_type_params(&ty, &param_map);
         assert_eq!(result.to_token_stream().to_string(), "Uuid");
     }
-    
+
     #[test]
     fn test_substitute_type_params_in_result() {
         let ty: Type = syn::parse_str("std::result::Result<T, MyError>").unwrap();
         let uuid_type: Type = syn::parse_str("Uuid").unwrap();
         let mut param_map = HashMap::new();
         param_map.insert("T".to_string(), &uuid_type);
-        
+
         let result = substitute_type_params(&ty, &param_map);
         assert_eq!(
             result.to_token_stream().to_string(),
             "std :: result :: Result < Uuid , MyError >"
         );
     }
-    
+
     #[test]
     fn test_substitute_type_params_nested() {
         let ty: Type = syn::parse_str("Option<Vec<T>>").unwrap();
         let i32_type: Type = syn::parse_str("i32").unwrap();
         let mut param_map = HashMap::new();
         param_map.insert("T".to_string(), &i32_type);
-        
+
         let result = substitute_type_params(&ty, &param_map);
         assert_eq!(
             result.to_token_stream().to_string(),
             "Option < Vec < i32 > >"
         );
     }
-    
+
     #[test]
     fn test_substitute_type_params_multiple() {
         let ty: Type = syn::parse_str("HashMap<K, V>").unwrap();
@@ -257,7 +262,7 @@ mod tests {
         let mut param_map = HashMap::new();
         param_map.insert("K".to_string(), &string_type);
         param_map.insert("V".to_string(), &i32_type);
-        
+
         let result = substitute_type_params(&ty, &param_map);
         assert_eq!(
             result.to_token_stream().to_string(),

@@ -18,7 +18,7 @@ pub(crate) fn parse_type_maybe_result(
                 // Check if this is a Result type directly OR a type alias that resolves to Result
                 let is_result = type_name == &"Result";
                 let is_result_alias = !is_result && is_result_type_alias(type_parser, type_name);
-                
+
                 if is_result || is_result_alias {
                     // Check if this might be a generic type alias like `type Result<T> = std::result::Result<T, MyError>`
                     // or `type WResult<T> = std::result::Result<T, MyError>`
@@ -31,9 +31,7 @@ pub(crate) fn parse_type_maybe_result(
 
                     let args_to_parse = resolved_args.as_deref().unwrap_or(args);
                     let parsed_args = (args_to_parse.iter())
-                        .map(|arg| {
-                            type_parser.parse_type(arg, context)
-                        })
+                        .map(|arg| type_parser.parse_type(arg, context))
                         .collect::<anyhow::Result<Vec<_>>>()?;
                     return parse_type_result(&parsed_args);
                 }
@@ -204,8 +202,8 @@ fn set_is_exception_flag(mut ty: MirType) -> MirType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quote::ToTokens;
     use crate::codegen::ir::hir::flat::type_alias::HirFlatTypeAlias;
+    use quote::ToTokens;
 
     #[test]
     fn test_extract_type_path_args() {

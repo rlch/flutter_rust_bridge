@@ -109,10 +109,11 @@ impl DartRepository {
     /// Check if a package is listed in dependencies (without version checking).
     pub(crate) fn has_dependency(&self, package: &str) -> bool {
         let at = &self.at;
-        let manifest_file: PubspecYaml = match read_file_and_parse_yaml(at, DartToolchain::manifest_filename()) {
-            Ok(f) => f,
-            Err(_) => return false,
-        };
+        let manifest_file: PubspecYaml =
+            match read_file_and_parse_yaml(at, DartToolchain::manifest_filename()) {
+                Ok(f) => f,
+                Err(_) => return false,
+            };
         let deps = manifest_file.dependencies.unwrap_or_default();
         deps.contains_key(package)
     }

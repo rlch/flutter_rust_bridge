@@ -15,11 +15,11 @@ use crate::codegen::Config;
 use crate::library::commands::cargo_metadata::execute_cargo_metadata;
 use crate::utils::dart_repository::dart_repo::DartRepository;
 use crate::utils::dart_repository::get_dart_package_name;
-use log::debug;
 use crate::utils::path_utils::path_to_string;
 use crate::utils::syn_utils::canonicalize_rust_type;
 use anyhow::Context;
 use itertools::Itertools;
+use log::debug;
 use pathdiff::diff_paths;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -58,7 +58,9 @@ pub(super) fn parse(args: Args) -> anyhow::Result<GeneratorInternalConfig> {
     let default_external_library_loader =
         compute_default_external_library_loader(rust_crate_dir, dart_root, config);
     let c_symbol_prefix = compute_c_symbol_prefix(dart_root)?;
-    let use_oxidized = config.use_oxidized.unwrap_or_else(|| detect_oxidized_dependency(dart_root));
+    let use_oxidized = config
+        .use_oxidized
+        .unwrap_or_else(|| detect_oxidized_dependency(dart_root));
 
     Ok(GeneratorInternalConfig {
         api_dart: GeneratorApiDartInternalConfig {
@@ -216,7 +218,9 @@ fn detect_oxidized_dependency(dart_root: &Path) -> bool {
         Ok(repo) => {
             let has_oxidized = repo.has_dependency("oxidized");
             if has_oxidized {
-                debug!("Detected oxidized package in dependencies - will generate Result return types");
+                debug!(
+                    "Detected oxidized package in dependencies - will generate Result return types"
+                );
             }
             has_oxidized
         }
