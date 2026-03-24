@@ -39,6 +39,34 @@ impl TypeParserWithContext<'_, '_, '_> {
         name: NamespacedName,
         wrapper_name: Option<String>,
     ) -> anyhow::Result<MirStruct> {
+        let attributes = FrbAttributes::parse(&src_struct.src.attrs)?;
+
+        let ignore = parse_struct_or_enum_should_ignore(
+            src_struct,
+            &name.namespace.crate_name(),
+            self.context,
+        );
+
+        // Skip field parsing entirely for ignored structs — their fields may
+        // contain types FRB can't handle (e.g. Option<Option<T>>), which would
+        // cause a parse error before the ignore flag takes effect.
+        if ignore {
+            let comments = parse_comments(&src_struct.src.attrs);
+            return Ok(MirStruct {
+                name,
+                wrapper_name,
+                fields: vec![],
+                is_fields_named: true,
+                dart_metadata_raw: vec![],
+                ignore,
+                needs_json_serializable: false,
+                generate_hash: false,
+                generate_eq: false,
+                ui_state: false,
+                comments,
+            });
+        }
+
         let (is_fields_named, struct_fields) = match &src_struct.src.fields {
             Fields::Named(FieldsNamed { named, .. }) => (true, named),
             Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => (false, unnamed),
@@ -48,7 +76,6 @@ impl TypeParserWithContext<'_, '_, '_> {
             // frb-coverage:ignore-end
         };
 
-        let attributes = FrbAttributes::parse(&src_struct.src.attrs)?;
         let dart_metadata = attributes.dart_metadata();
 
         let fields = struct_fields
@@ -58,12 +85,6 @@ impl TypeParserWithContext<'_, '_, '_> {
             .collect::<anyhow::Result<Vec<_>>>()?;
 
         let comments = parse_comments(&src_struct.src.attrs);
-
-        let ignore = parse_struct_or_enum_should_ignore(
-            src_struct,
-            &name.namespace.crate_name(),
-            self.context,
-        );
 
         Ok(MirStruct {
             name,
