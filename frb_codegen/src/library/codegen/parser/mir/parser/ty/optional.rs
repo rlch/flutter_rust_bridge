@@ -7,13 +7,11 @@ use crate::codegen::ir::mir::ty::MirType::{
 };
 use crate::codegen::parser::mir::parser::ty::unencodable::SplayedSegment;
 use crate::codegen::parser::mir::parser::ty::TypeParserWithContext;
-use quote::ToTokens;
-use syn::TypePath;
 
 impl TypeParserWithContext<'_, '_, '_> {
     pub(crate) fn parse_type_path_data_optional(
         &mut self,
-        type_path: &TypePath,
+        _type_path: &syn::TypePath,
         last_segment: &SplayedSegment,
     ) -> anyhow::Result<Option<MirType>> {
         Ok(Some(match last_segment {
