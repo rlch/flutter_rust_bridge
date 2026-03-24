@@ -141,5 +141,7 @@ fn remove_ty_path_prefix(raw: &str) -> String {
     lazy_static! {
         static ref REGEX: Regex = Regex::new(r"[a-zA-Z0-9_ ]+::").unwrap();
     }
-    REGEX.replace_all(raw, "").to_string()
+    let result = REGEX.replace_all(raw, "").to_string();
+    // Strip leading :: left over from absolute paths (e.g. ::HashMap after stripping ::std::collections::)
+    result.strip_prefix("::").unwrap_or(&result).to_string()
 }
