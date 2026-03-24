@@ -109,11 +109,7 @@ fn parse_type_rust_auto_opaque_common_raw(
     codec: RustOpaqueCodecMode,
     dart_api_type: Option<String>,
 ) -> Result<(MirRustAutoOpaqueRaw, MirTypeRustOpaque)> {
-    let token_str = inner.to_token_stream().to_string();
-    // Short name (path-stripped) for Dart class naming and type identity
-    let short_name = remove_ty_path_prefix(&token_str);
-    // Full qualified path for Rust code generation — compiles without extra imports
-    let full_path = normalize_token_stream_path(&token_str);
+    let inner_str = remove_ty_path_prefix(&inner.to_token_stream().to_string());
 
     let raw_segments = match inner {
         Type::Path(inner) => extract_path_data(&inner.path)?,
@@ -122,7 +118,7 @@ fn parse_type_rust_auto_opaque_common_raw(
 
     Ok((
         MirRustAutoOpaqueRaw {
-            string: MirLifetimeAwareType::new(short_name),
+            string: MirLifetimeAwareType::new(inner_str.clone()),
             segments: raw_segments,
         },
         MirTypeRustOpaque {
@@ -130,7 +126,7 @@ fn parse_type_rust_auto_opaque_common_raw(
             // TODO when all usages of a type do not require `&mut`, can drop this Mutex
             // TODO similarly, can use std instead of `tokio`'s lock
             inner: MirRustOpaqueInner(MirLifetimeAwareType::new(format!(
-                "flutter_rust_bridge::for_generated::RustAutoOpaqueInner<{full_path}>"
+                "flutter_rust_bridge::for_generated::RustAutoOpaqueInner<{inner_str}>"
             ))),
             codec,
             dart_api_type,
@@ -139,27 +135,13 @@ fn parse_type_rust_auto_opaque_common_raw(
     ))
 }
 
-/// Strip path prefixes for Dart-side naming.
-/// e.g. `std :: collections :: HashMap < K , V >` -> `HashMap < K , V >`
+/// e.g. `a::b::C` -> `C`
 fn remove_ty_path_prefix(raw: &str) -> String {
+    // Currently only via simple regex; can utilize syn tree later
     lazy_static! {
         static ref REGEX: Regex = Regex::new(r"[a-zA-Z0-9_ ]+::").unwrap();
     }
     let result = REGEX.replace_all(raw, "").to_string();
-    result.strip_prefix("::").unwrap_or(&result).trim().to_string()
-}
-
-/// Normalize syn's token stream output for use in generated Rust code.
-/// Keeps fully-qualified paths intact but removes extra whitespace.
-/// e.g. `:: std :: collections :: HashMap < K , V >` -> `::std::collections::HashMap<K, V>`
-fn normalize_token_stream_path(raw: &str) -> String {
-    raw.replace(" :: ", "::")
-        .replace(":: ", "::")
-        .replace(" ::", "::")
-        .replace("< ", "<")
-        .replace(" >", ">")
-        .replace(" ,", ",")
-        .replace(",", ", ")
-        .trim()
-        .to_string()
+    // Strip leading :: left over from absolute paths (e.g. ::HashMap after stripping ::std::collections::)
+    result.strip_prefix("::").unwrap_or(&result).to_string()
 }
