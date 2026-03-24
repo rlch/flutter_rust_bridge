@@ -167,6 +167,19 @@ impl ApiDartGeneratorInfoTrait for GeneralListApiDartGenerator<'_> {
 
 impl ApiDartGeneratorInfoTrait for OptionalApiDartGenerator<'_> {
     fn dart_api_type(&self) -> String {
+        // Unwrap synthetic boxed wrapper if present
+        let inner_ty = match &*self.mir.inner {
+            MirType::Boxed(b) if !b.exist_in_real_api => &*b.inner,
+            other => other,
+        };
+
+        // Nested optionals: render inner as oxidized `Option<T>` instead of
+        // `T?`, so `Option<Option<T>>` becomes `Option<T>?` (not `T??`).
+        if let MirType::Optional(inner_opt) = inner_ty {
+            let innermost = ApiDartGenerator::new(inner_opt.inner.clone(), self.context);
+            return format!("Option<{}>?", innermost.dart_api_type());
+        }
+
         let inner = ApiDartGenerator::new(self.mir.inner.clone(), self.context);
         format!("{}?", inner.dart_api_type())
     }
