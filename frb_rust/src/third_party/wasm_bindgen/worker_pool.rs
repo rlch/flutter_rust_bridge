@@ -259,7 +259,11 @@ impl PoolState {
 
 impl Default for WorkerPool {
     fn default() -> Self {
-        Self::new(None, None, None, None).expect("fail to create WorkerPool")
+        // Use `Some(0)` instead of `None` so workers are spawned lazily on first
+        // FFI dispatch rather than eagerly at module init (sized by
+        // `navigator.hardwareConcurrency`). This avoids spawning N web workers
+        // on cold start when the app may not need any.
+        Self::new(Some(0), None, None, None).expect("fail to create WorkerPool")
     }
 }
 
