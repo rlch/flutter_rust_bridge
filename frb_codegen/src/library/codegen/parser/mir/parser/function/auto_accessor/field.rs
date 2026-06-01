@@ -88,6 +88,7 @@ pub(super) fn parse_auto_accessor_of_field(
         initializer: false,
         arg_mode: MirFuncArgMode::Named,
         accessor: Some(accessor_mode),
+        category: None,
         comments: vec![],
         codec_mode_pack: compute_codec_mode_pack(
             &FrbAttributes::parse(&[]).unwrap(),

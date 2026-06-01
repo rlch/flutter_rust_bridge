@@ -24,7 +24,7 @@ pub use crate::generalized_isolate::IntoDartExceptPrimitive;
 pub use crate::handler::error::Error as HandlerError;
 pub use crate::handler::error_listener::ErrorListener;
 pub use crate::handler::executor::Executor;
-pub use crate::handler::handler::{FfiCallMode, TaskInfo};
+pub use crate::handler::handler::{Category, FfiCallMode, TaskInfo};
 pub use crate::handler::handler::{TaskContext, TaskRetFutTrait};
 pub use crate::handler::implementation::error_listener::NoOpErrorListener;
 pub use crate::handler::implementation::executor::SimpleExecutor;

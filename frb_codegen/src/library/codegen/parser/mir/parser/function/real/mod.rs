@@ -230,6 +230,7 @@ impl<'a, 'b> FunctionParser<'a, 'b> {
         let stream_dart_await = attributes.stream_dart_await() && dart_async;
         let namespace_refined = refine_namespace(&owner).unwrap_or(func.namespace.clone());
         let accessor = attributes.accessor();
+        let category = resolve_frb_category(&attributes);
 
         let output = MirFuncOutput {
             normal: info.ok_output.unwrap_or(Primitive(MirTypePrimitive::Unit)),
@@ -254,6 +255,7 @@ impl<'a, 'b> FunctionParser<'a, 'b> {
             rust_async: func.item_fn.sig().asyncness.is_some(),
             initializer: attributes.init(),
             accessor,
+            category,
             arg_mode: if attributes.positional() {
                 MirFuncArgMode::Positional
             } else {
@@ -308,6 +310,20 @@ fn compute_func_mode(dart_async: bool, info: &FunctionPartialInfo) -> MirFuncMod
     } else {
         MirFuncMode::Sync
     })
+}
+
+/// The explicit `#[frb(category = ...)]` routing lane, if set. `None` means the
+/// function did not annotate; the wire generator defaults it to `Category::Main`.
+///
+/// NOTE: hybrid enforcement (requiring a category on `sync`/session-bearing
+/// functions) is NOT done here. A `bail!` inside per-function parsing is caught
+/// upstream and turned into a silent function *skip* (see
+/// `Parser::parse_function`, `stop_on_error=false`), which would drop the
+/// function entirely. Enforcement therefore lives in a post-parse validation
+/// pass that returns a propagating error — see
+/// `function::validate_frb_categories`.
+fn resolve_frb_category(attributes: &FrbAttributes) -> Option<String> {
+    attributes.category()
 }
 
 fn parse_name(function_sig_ident_raw_name: &str, owner: &MirFuncOwnerInfo) -> String {

@@ -8,7 +8,7 @@ pub(crate) mod implementation;
 pub use error::Error as HandlerError;
 pub use error_listener::ErrorListener;
 pub use executor::Executor;
-pub use handler::{FfiCallMode, TaskInfo};
+pub use handler::{Category, FfiCallMode, TaskInfo};
 pub use handler::{TaskContext, TaskRetFutTrait};
 pub use implementation::error_listener::NoOpErrorListener;
 pub use implementation::executor::SimpleExecutor;
