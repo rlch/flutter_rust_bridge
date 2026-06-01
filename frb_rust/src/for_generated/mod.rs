@@ -26,6 +26,9 @@ pub use crate::handler::error_listener::ErrorListener;
 pub use crate::handler::executor::Executor;
 pub use crate::handler::handler::{Category, FfiCallMode, TaskInfo};
 pub use crate::handler::handler::{TaskContext, TaskRetFutTrait};
+pub use crate::handler::implementation::category_executor::{
+    CategoryExecutor, CategoryJob, CategoryThreadPools,
+};
 pub use crate::handler::implementation::error_listener::NoOpErrorListener;
 pub use crate::handler::implementation::executor::SimpleExecutor;
 pub use crate::handler::implementation::handler::SimpleHandler;

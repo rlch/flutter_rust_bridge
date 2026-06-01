@@ -10,6 +10,9 @@ pub use error_listener::ErrorListener;
 pub use executor::Executor;
 pub use handler::{Category, FfiCallMode, TaskInfo};
 pub use handler::{TaskContext, TaskRetFutTrait};
+pub use implementation::category_executor::{
+    CategoryExecutor, CategoryJob, CategoryThreadPools,
+};
 pub use implementation::error_listener::NoOpErrorListener;
 pub use implementation::executor::SimpleExecutor;
 pub use implementation::handler::SimpleHandler;
