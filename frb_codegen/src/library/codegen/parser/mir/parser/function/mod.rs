@@ -30,29 +30,29 @@ pub(crate) fn parse(
     ]);
     let (funcs, skips) = IrValueOrSkip::split(items);
     let funcs = sort_and_add_func_id(funcs);
-    validate_frb_categories(&funcs)?;
+    validate_frb_threads(&funcs)?;
     Ok((funcs, skips))
 }
 
-/// Hybrid enforcement for `#[frb(category = ...)]` (the executor routing lane).
+/// Hybrid enforcement for `#[frb(thread = ...)]` (the executor routing lane).
 ///
 /// A function that may touch live CRDT/session state — it runs on the main
 /// thread via `sync`, OR carries a session-handle argument — MUST declare a
-/// category so the custom executor routes it to the right worker. Pure getters
-/// may omit it and default to `Category::Main`.
+/// thread so the custom executor routes it to the right worker. Pure getters
+/// may omit it and default to `Thread::Main`.
 ///
 /// This runs as a post-parse pass (not inside per-function parsing) because an
 /// error raised during `Parser::parse_function` with `stop_on_error=false` is
 /// swallowed into a silent function *skip*, which would drop the offending
 /// functions instead of failing the build. Returning the error here propagates
 /// it to the top level.
-fn validate_frb_categories(funcs: &[MirFunc]) -> anyhow::Result<()> {
+fn validate_frb_threads(funcs: &[MirFunc]) -> anyhow::Result<()> {
     const SESSION_HANDLE_ARGS: &[&str] =
         &["session_id", "drive_id", "browser_id", "wizard_id"];
 
     let offenders = funcs
         .iter()
-        .filter(|func| func.category.is_none())
+        .filter(|func| func.thread.is_none())
         .filter(|func| {
             let is_sync = matches!(func.mode, MirFuncMode::Sync);
             let has_session_arg = func.inputs.iter().any(|input| {
@@ -67,8 +67,8 @@ fn validate_frb_categories(funcs: &[MirFunc]) -> anyhow::Result<()> {
         bail!(
             "the following functions may touch live CRDT/session state (they are \
              `sync` or carry a session/drive/browser/wizard id) but have no \
-             `#[frb(category = ...)]` annotation; add \
-             `#[frb(category = Main|Loro|Ai|Export|Sync)]` to each so the custom \
+             `#[frb(thread = ...)]` annotation; add \
+             `#[frb(thread = Main|Loro|Export)]` to each so the custom \
              executor routes it to the correct worker: {offenders:?}"
         );
     }

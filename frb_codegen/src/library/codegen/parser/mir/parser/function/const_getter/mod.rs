@@ -78,7 +78,7 @@ fn parse_constant(
         initializer: false,
         arg_mode: MirFuncArgMode::Positional,
         accessor: Some(MirFuncAccessorMode::Getter),
-        category: None,
+        thread: None,
         comments: vec![],
         codec_mode_pack: compute_codec_mode_pack(
             &FrbAttributes::parse(&[])?,

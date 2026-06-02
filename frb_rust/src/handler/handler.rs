@@ -76,21 +76,21 @@ pub struct TaskInfo {
     pub debug_name: &'static str,
     /// The call mode of this function.
     pub mode: FfiCallMode,
-    /// Which executor "category" (thread/worker lane) this call must run on.
+    /// Which executor thread/worker lane this call must run on.
     /// A custom [`super::executor::Executor`] uses this as a typed routing key
     /// instead of matching on [`TaskInfo::debug_name`]. The default executor
-    /// ignores it. Stamped by codegen from `#[frb(category = ...)]`; defaults to
-    /// [`Category::Main`] when unset.
-    pub category: Category,
+    /// ignores it. Stamped by codegen from `#[frb(thread = ...)]`; defaults to
+    /// [`Thread::Main`] when unset.
+    pub thread: Thread,
 }
 
 /// Typed routing key for a custom [`super::executor::Executor`].
 ///
 /// The default executor ignores this. A custom executor maps each call to a
-/// thread/worker lane by category, so the routing decision is a typed enum match
+/// thread/worker lane, so the routing decision is a typed enum match
 /// rather than a string comparison on [`TaskInfo::debug_name`].
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
-pub enum Category {
+pub enum Thread {
     /// Pure, side-effect-free getters; safe to run on the caller (main) thread.
     /// Also config/global setters that touch no CRDT state, and `!Send`
     /// main-thread browser APIs (e.g. the sync WebSocket), which cannot leave

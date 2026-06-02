@@ -27,14 +27,14 @@ pub struct MirFunc {
     pub initializer: bool,
     pub arg_mode: MirFuncArgMode,
     pub accessor: Option<MirFuncAccessorMode>,
-    /// `#[frb(category = ...)]` executor routing lane (variant identifier of
-    /// `flutter_rust_bridge::for_generated::Category`), if explicitly set.
+    /// `#[frb(thread = ...)]` executor routing lane (variant identifier of
+    /// `flutter_rust_bridge::for_generated::Thread`), if explicitly set.
     /// `None` => codegen applies the hybrid default/enforcement rule.
     /// Skipped from serialization: it's routing metadata consumed by the wire
     /// generator, not part of the MIR golden-snapshot contract (mirrors
     /// `src_lineno_pseudo`). The generated `TaskInfo` literal is the real output.
     #[serde(skip_serializing)]
-    pub category: Option<String>,
+    pub thread: Option<String>,
     pub comments: Vec<MirComment>,
     pub codec_mode_pack: CodecModePack,
     pub rust_call_code: Option<String>,
