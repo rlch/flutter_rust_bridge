@@ -716,7 +716,7 @@ impl Parse for FrbAttributeName {
 pub(crate) struct FrbAttributeCategory(pub(crate) String);
 
 impl FrbAttributeCategory {
-    const VALID: &'static [&'static str] = &["Main", "Loro", "Ai", "Export", "Sync"];
+    const VALID: &'static [&'static str] = &["Main", "Loro", "Export"];
 }
 
 impl Parse for FrbAttributeCategory {

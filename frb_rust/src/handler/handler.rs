@@ -92,16 +92,15 @@ pub struct TaskInfo {
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub enum Category {
     /// Pure, side-effect-free getters; safe to run on the caller (main) thread.
+    /// Also config/global setters that touch no CRDT state, and `!Send`
+    /// main-thread browser APIs (e.g. the sync WebSocket), which cannot leave
+    /// the main thread.
     #[default]
     Main,
     /// Touches live CRDT/session state; must run on the single owner worker.
     Loro,
-    /// Generation / network / tool calls; no live-state handle.
-    Ai,
     /// Render-from-snapshot (pdf / thumbnail); no live-state handle.
     Export,
-    /// Long-lived sync transport (e.g. WebSocket); carries bytes only.
-    Sync,
 }
 
 /// The types of return values for a particular Rust function.
