@@ -76,6 +76,31 @@ pub struct TaskInfo {
     pub debug_name: &'static str,
     /// The call mode of this function.
     pub mode: FfiCallMode,
+    /// Which executor thread/worker lane this call must run on.
+    /// A custom [`super::executor::Executor`] uses this as a typed routing key
+    /// instead of matching on [`TaskInfo::debug_name`]. The default executor
+    /// ignores it. Stamped by codegen from `#[frb(thread = ...)]`; defaults to
+    /// [`Thread::Main`] when unset.
+    pub thread: Thread,
+}
+
+/// Typed routing key for a custom [`super::executor::Executor`].
+///
+/// The default executor ignores this. A custom executor maps each call to a
+/// thread/worker lane, so the routing decision is a typed enum match
+/// rather than a string comparison on [`TaskInfo::debug_name`].
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum Thread {
+    /// Pure, side-effect-free getters; safe to run on the caller (main) thread.
+    /// Also config/global setters that touch no CRDT state, and `!Send`
+    /// main-thread browser APIs (e.g. the sync WebSocket), which cannot leave
+    /// the main thread.
+    #[default]
+    Main,
+    /// Touches live CRDT/session state; must run on the single owner worker.
+    Loro,
+    /// Render-from-snapshot (pdf / thumbnail); no live-state handle.
+    Export,
 }
 
 /// The types of return values for a particular Rust function.

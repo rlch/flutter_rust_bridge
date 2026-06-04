@@ -80,6 +80,16 @@ impl FrbAttributes {
         self.any_eq(&FrbAttribute::StreamDartAwait)
     }
 
+    /// The `#[frb(thread = ...)]` routing lane variant identifier, if set.
+    pub(crate) fn thread(&self) -> Option<String> {
+        self.0
+            .iter()
+            .filter_map(|item| {
+                if_then_some!(let FrbAttribute::Thread(inner) = item, inner.0.clone())
+            })
+            .last()
+    }
+
     pub(crate) fn accessor(&self) -> Option<MirFuncAccessorMode> {
         if self.any_eq(&FrbAttribute::Getter) {
             Some(MirFuncAccessorMode::Getter)
@@ -306,6 +316,7 @@ mod frb_keyword {
     syn::custom_keyword!(default);
     syn::custom_keyword!(dart_code);
     syn::custom_keyword!(name);
+    syn::custom_keyword!(thread);
     syn::custom_keyword!(rust2dart);
     syn::custom_keyword!(dart2rust);
     syn::custom_keyword!(dart_type);
@@ -342,6 +353,7 @@ enum FrbAttribute {
     Init,
     Mirror(FrbAttributeMirror),
     Name(FrbAttributeName),
+    Thread(FrbAttributeThread),
     NonEq,
     NonFinal,
     NonHash,
@@ -457,6 +469,10 @@ impl Parse for FrbAttribute {
             input.parse::<name>()?;
             input.parse::<Token![=]>()?;
             input.parse().map(Name)?
+        } else if lookahead.peek(frb_keyword::thread) {
+            input.parse::<frb_keyword::thread>()?;
+            input.parse::<Token![=]>()?;
+            input.parse().map(Thread)?
         } else if lookahead.peek(frb_keyword::dart2rust) {
             input.parse::<frb_keyword::dart2rust>()?;
             input.parse().map(Dart2Rust)?
@@ -693,6 +709,33 @@ impl Parse for FrbAttributeName {
     }
 }
 
+/// Value of `#[frb(thread = <Ident>)]` — the executor routing lane.
+/// Mirrors `flutter_rust_bridge::for_generated::Thread`. Stored as the variant
+/// identifier so codegen can emit `Thread::<variant>` verbatim.
+#[derive(Clone, Serialize, Eq, PartialEq, Debug)]
+pub(crate) struct FrbAttributeThread(pub(crate) String);
+
+impl FrbAttributeThread {
+    const VALID: &'static [&'static str] = &["Main", "Loro", "Export"];
+}
+
+impl Parse for FrbAttributeThread {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let ident: syn::Ident = input.parse()?;
+        let value = ident.to_string();
+        if !Self::VALID.contains(&value.as_str()) {
+            return Err(syn::Error::new(
+                ident.span(),
+                format!(
+                    "unknown frb thread `{value}`; expected one of {:?}",
+                    Self::VALID
+                ),
+            ));
+        }
+        Ok(Self(value))
+    }
+}
+
 #[derive(Clone, Serialize, Eq, PartialEq, Debug)]
 pub(crate) struct FrbAttributeSerDes {
     pub dart_type: String,
@@ -726,7 +769,7 @@ mod tests {
     use crate::codegen::ir::mir::default::MirDefaultValue;
     use crate::codegen::parser::mir::parser::attribute::{
         FrbAttribute, FrbAttributeDartCode, FrbAttributeDefaultValue, FrbAttributeMirror,
-        FrbAttributeName, FrbAttributeSerDes, FrbAttributes, NamedOption,
+        FrbAttributeName, FrbAttributeSerDes, FrbAttributeThread, FrbAttributes, NamedOption,
     };
     use crate::if_then_some;
     use quote::quote;
@@ -758,6 +801,36 @@ mod tests {
         let parsed = parse("#[frb(sync)]\n#[frb(non_final)]")?;
         assert_eq!(parsed.0, vec![FrbAttribute::Sync, FrbAttribute::NonFinal]);
         Ok(())
+    }
+
+    #[test]
+    fn test_thread() -> anyhow::Result<()> {
+        let parsed = parse("#[frb(thread = Loro)]")?;
+        assert_eq!(
+            parsed.0,
+            vec![FrbAttribute::Thread(FrbAttributeThread("Loro".to_owned()))]
+        );
+        assert_eq!(parsed.thread(), Some("Loro".to_owned()));
+        Ok(())
+    }
+
+    #[test]
+    fn test_thread_with_sync() -> anyhow::Result<()> {
+        let parsed = parse("#[frb(sync, thread = Main)]")?;
+        assert_eq!(
+            parsed.0,
+            vec![
+                FrbAttribute::Sync,
+                FrbAttribute::Thread(FrbAttributeThread("Main".to_owned()))
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_thread_invalid() {
+        let result = parse("#[frb(thread = Nonsense)]");
+        assert!(result.is_err());
     }
 
     #[test]

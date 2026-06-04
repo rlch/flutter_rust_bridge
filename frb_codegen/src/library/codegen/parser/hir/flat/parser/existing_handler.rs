@@ -31,5 +31,10 @@ pub(super) fn parse_existing_handler(
 
 fn parse_has_executor(item: &syn::Item) -> bool {
     let code = quote::quote!(#item).to_string();
+    // A custom handler is declared as a static named HANDLER_NAME. Accept both a
+    // plain `static FLUTTER_RUST_BRIDGE_HANDLER` and the `lazy_static!`-generated
+    // `static ref FLUTTER_RUST_BRIDGE_HANDLER` form (the latter is needed when the
+    // handler can't be const-constructed, e.g. it builds worker pools at init).
     code.contains(&format!("static {HANDLER_NAME}"))
+        || code.contains(&format!("static ref {HANDLER_NAME}"))
 }
