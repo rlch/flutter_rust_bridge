@@ -64,6 +64,8 @@ pub use crate::rust_auto_opaque::{inner::RustAutoOpaqueInner, RustAutoOpaqueBase
 pub use crate::rust_opaque::{dart2rust::decode_rust_opaque_nom, RustOpaqueBase};
 pub use crate::stream::stream_sink::StreamSinkBase;
 pub use crate::thread_pool::{BaseThreadPool, SimpleThreadPool};
+#[cfg(all(feature = "rust-async", not(target_family = "wasm")))]
+pub use crate::thread_pool::SingleThreadAsyncLane;
 #[cfg(target_family = "wasm")]
 pub use crate::web_transfer::transfer_closure::TransferClosure;
 #[cfg(feature = "anyhow")]
