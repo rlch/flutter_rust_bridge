@@ -186,6 +186,7 @@ mod tests {
                 enable_lifetime: false,
                 type_64bit_int: false,
                 default_dart_async: true,
+                lane_routing: None,
             },
         };
 

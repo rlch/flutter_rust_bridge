@@ -1,3 +1,4 @@
+use crate::codegen::config::config::LaneRoutingConfig;
 use crate::codegen::generator::codec::structs::{CodecMode, CodecModePack};
 use crate::codegen::ir::mir::ty::rust_opaque::RustOpaqueCodecMode;
 use crate::utils::namespace::Namespace;
@@ -13,6 +14,7 @@ pub(crate) struct ParserMirInternalConfig {
     pub enable_lifetime: bool,
     pub type_64bit_int: bool,
     pub default_dart_async: bool,
+    pub lane_routing: Option<LaneRoutingConfig>,
 }
 
 // TODO rename - this is no longer an "input-namespace"-only pack

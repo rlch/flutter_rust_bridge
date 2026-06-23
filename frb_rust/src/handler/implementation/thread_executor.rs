@@ -5,8 +5,8 @@
 //! port/sender/panic plumbing is identical — but instead of a single thread
 //! pool it holds a [`ThreadRouter`] and asks it which pool a call goes
 //! to, keyed by the typed [`Thread`]. `execute_sync` still runs inline on the
-//! caller (the main thread), so a custom routing setup keeps Loro-free getters
-//! on main and everything stateful on its lane.
+//! caller (the main thread), so a custom routing setup keeps stateless getters
+//! on main and everything else on its dedicated lane.
 //!
 //! The default generated handler does NOT use this; it is opt-in by providing a
 //! custom `FLUTTER_RUST_BRIDGE_HANDLER` built from `SimpleHandler<ThreadExecutor<...>, _>`.
@@ -77,7 +77,7 @@ macro_rules! thread_job {
 ///   [`SimpleExecutor`](super::executor::SimpleExecutor) builds, then route it
 ///   to the `thread`'s lane via [`ThreadRouter::execute_on`].
 /// - `execute_sync`: run inline on the caller (main thread), exactly like
-///   `SimpleExecutor`. Callers must only expose Loro-free getters as `sync`.
+///   `SimpleExecutor`. Callers must only expose state-free getters as `sync`.
 pub struct ThreadExecutor<EL: ErrorListener, P: ThreadRouter> {
     error_listener: EL,
     pools: P,
@@ -147,8 +147,8 @@ impl<EL: ErrorListener + Sync, P: ThreadRouter> Executor for ThreadExecutor<EL, 
         Rust2DartCodec: BaseCodec,
     {
         // sync == inline on the caller == main thread. Embedders must ensure no
-        // Loro-touching function is exposed as `sync` (enforced at codegen via
-        // the `#[frb(thread = ...)]` hybrid rule).
+        // state-touching function is exposed as `sync` (which they can enforce
+        // at codegen via the `lane_routing` `require_annotation_when` config).
         match sync_task() {
             Ok(data) => data,
             Err(err) => {
@@ -248,22 +248,20 @@ impl ThreadExecuteUtils {
 }
 
 // =============================================================================
-// Reproduction: a single-worker lane must not pin on `.await`.
+// A single-worker lane must not pin on `.await`.
 //
-// Mirrors modality's `LanePools` (one dedicated worker per `Thread`, FIFO — the
-// single-owner invariant that serializes every LoroDoc access). The hazard
-// `bounded_loro_wait` bandages is that on native `execute_async` drives the
-// task future with `futures::executor::block_on` (see `spawn_local_compat`
-// above), which PARKS the lane's only worker on `.await` instead of yielding —
-// so an awaiting handler starves every other call routed to the same lane
-// (catalog/wizard reads, the drainer reply it is waiting on). On wasm the same
-// path uses `spawn_local`, which yields, so wasm is unaffected.
+// `ThreadExecutor` routes each call to a worker lane. When a consumer makes a
+// lane a single worker (the only way to get FIFO single-owner ordering), an
+// async handler that `.await`s must YIELD that worker to other queued calls on
+// the same lane — not park it. Native `execute_async` drives the future with
+// `tokio::task::spawn_local` onto the lane's `LocalSet` (see `spawn_local_compat`
+// above) precisely so it yields; a `block_on` there would park the single worker
+// until the future resolved, starving every other call on the lane. The wasm
+// path already yields via `spawn_local`.
 //
-// This test routes two async tasks to one single-worker lane with a cross-task
-// dependency. Cooperative scheduling completes both; `block_on` deadlocks. It
-// FAILS on the current native impl (reproducing the bug) and must PASS once the
-// lane drives futures with a cooperative single-threaded runtime
-// (current_thread + LocalSet).
+// This routes two async tasks to one single-worker lane with a cross-task
+// dependency: cooperative scheduling completes both; a parking driver would
+// deadlock (A holds the worker awaiting B, which can never start).
 #[cfg(all(test, feature = "rust-async", feature = "thread-pool", not(target_family = "wasm")))]
 mod single_worker_lane_pinning_tests {
     use super::*;
@@ -275,10 +273,8 @@ mod single_worker_lane_pinning_tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
-    /// One single-owner lane per `Thread` — identical in shape to modality's
-    /// `frb_handler::LanePools`. Backed by `SingleThreadAsyncLane` so async tasks
-    /// are driven cooperatively (one thread, one `LocalSet`) instead of
-    /// `block_on`-parked.
+    /// A router with one single-owner lane, backed by `SingleThreadAsyncLane` so
+    /// async tasks are driven cooperatively (one thread, one `LocalSet`).
     struct SingleWorkerLane {
         worker: SingleThreadAsyncLane,
     }
@@ -289,12 +285,12 @@ mod single_worker_lane_pinning_tests {
         }
     }
 
-    fn loro_task(port: i64) -> TaskInfo {
+    fn worker_task(port: i64) -> TaskInfo {
         TaskInfo {
             port: Some(port),
             debug_name: "repro",
             mode: FfiCallMode::Normal,
-            thread: Thread::Loro,
+            thread: Thread::Worker("w"),
         }
     }
 
@@ -309,20 +305,20 @@ mod single_worker_lane_pinning_tests {
         let exec = ThreadExecutor::new(
             NoOpErrorListener,
             SingleWorkerLane {
-                worker: SingleThreadAsyncLane::new("repro-loro-lane"),
+                worker: SingleThreadAsyncLane::new("repro-lane"),
             },
         );
 
         // gate: opened by B, awaited by A. `oneshot` needs only a waker (no
-        // reactor), so awaiting it is valid on the reactor-less Loro lane.
+        // reactor), so awaiting it is valid on the reactor-less worker lane.
         let (gate_tx, gate_rx) = futures::channel::oneshot::channel::<()>();
         let (done_tx, done_rx) = mpsc::channel::<&'static str>();
 
         // Task A — submitted first, so it occupies the single worker first, then
-        // awaits B's gate. Under cooperative scheduling this await yields the
-        // lane; under `block_on` it parks the only worker.
+        // awaits B's gate. Cooperative scheduling yields the lane here; a parking
+        // driver would hold the only worker.
         let done_a = done_tx.clone();
-        exec.execute_async::<DcoCodec, _, _>(loro_task(1), move |_ctx| async move {
+        exec.execute_async::<DcoCodec, _, _>(worker_task(1), move |_ctx| async move {
             let _ = gate_rx.await;
             let _ = done_a.send("A");
             ok_msg()
@@ -331,7 +327,7 @@ mod single_worker_lane_pinning_tests {
         // Task B — queued behind A on the same lane. Opens the gate so A can
         // finish. It can only run if A's await freed the worker.
         let done_b = done_tx.clone();
-        exec.execute_async::<DcoCodec, _, _>(loro_task(2), move |_ctx| async move {
+        exec.execute_async::<DcoCodec, _, _>(worker_task(2), move |_ctx| async move {
             let _ = gate_tx.send(());
             let _ = done_b.send("B");
             ok_msg()
@@ -344,12 +340,10 @@ mod single_worker_lane_pinning_tests {
                 Ok(who) => done.push(who),
                 Err(_) => panic!(
                     "single-worker lane PINNED: an awaiting task blocked a queued task on the \
-                     same lane (only completed {done:?}). Native `execute_async` drives the task \
-                     future with `futures::executor::block_on`, which parks the lane's single \
-                     worker on `.await` instead of yielding to the queued task — the exact \
-                     dispatch hazard `bounded_loro_wait` bandages. Fix: drive the lane with a \
-                     cooperative single-threaded runtime (current_thread + LocalSet) so `.await` \
-                     yields, matching the wasm `spawn_local` path."
+                     same lane (only completed {done:?}). The lane's async driver parked its \
+                     single worker on `.await` instead of yielding to the queued task. Fix: drive \
+                     the lane with a cooperative single-threaded runtime (current_thread + \
+                     LocalSet) so `.await` yields, matching the wasm `spawn_local` path."
                 ),
             }
         }

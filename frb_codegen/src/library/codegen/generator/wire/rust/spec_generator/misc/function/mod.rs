@@ -100,7 +100,12 @@ fn generate_wrap_info_obj(func: &MirFunc) -> String {
             "None"
         },
         mode = ffi_call_mode(func.mode),
-        thread = func.thread.as_deref().unwrap_or("Main"),
+        // `Main` (or unset) is the inline lane; any other key is an opaque
+        // worker-lane string the embedder's `ThreadRouter` resolves.
+        thread = match func.thread.as_deref() {
+            None | Some("Main") => "Main".to_owned(),
+            Some(key) => format!("Worker({key:?})"),
+        },
     )
 }
 
