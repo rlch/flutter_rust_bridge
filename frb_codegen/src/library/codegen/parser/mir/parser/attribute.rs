@@ -709,30 +709,19 @@ impl Parse for FrbAttributeName {
     }
 }
 
-/// Value of `#[frb(thread = <Ident>)]` — the executor routing lane.
-/// Mirrors `flutter_rust_bridge::for_generated::Thread`. Stored as the variant
-/// identifier so codegen can emit `Thread::<variant>` verbatim.
+/// Value of `#[frb(thread = <Ident>)]` — the executor routing lane key.
+/// Stored as the raw identifier; codegen emits `Thread::Main` for `Main` and
+/// `Thread::Worker("<ident>")` otherwise. FRB assigns no meaning to lanes here:
+/// parsing is purely syntactic, and any valid-lane / required-lane policy is
+/// enforced later against `lane_routing` config (see `validate_frb_threads`),
+/// where the embedder's config is available.
 #[derive(Clone, Serialize, Eq, PartialEq, Debug)]
 pub(crate) struct FrbAttributeThread(pub(crate) String);
-
-impl FrbAttributeThread {
-    const VALID: &'static [&'static str] = &["Main", "Loro", "Export"];
-}
 
 impl Parse for FrbAttributeThread {
     fn parse(input: ParseStream) -> Result<Self> {
         let ident: syn::Ident = input.parse()?;
-        let value = ident.to_string();
-        if !Self::VALID.contains(&value.as_str()) {
-            return Err(syn::Error::new(
-                ident.span(),
-                format!(
-                    "unknown frb thread `{value}`; expected one of {:?}",
-                    Self::VALID
-                ),
-            ));
-        }
-        Ok(Self(value))
+        Ok(Self(ident.to_string()))
     }
 }
 
@@ -828,9 +817,12 @@ mod tests {
     }
 
     #[test]
-    fn test_thread_invalid() {
-        let result = parse("#[frb(thread = Nonsense)]");
-        assert!(result.is_err());
+    fn test_thread_arbitrary_ident_accepted() -> anyhow::Result<()> {
+        // The parser is purely syntactic: any ident is a valid lane key here;
+        // lane-set validation happens later against `lane_routing` config.
+        let parsed = parse("#[frb(thread = AnyLane)]")?;
+        assert_eq!(parsed.thread(), Some("AnyLane".to_owned()));
+        Ok(())
     }
 
     #[test]

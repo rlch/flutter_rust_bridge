@@ -71,6 +71,8 @@ fn compute_codegen_config_from_naive_command_args(args: GenerateCommandArgsPrima
         dump_all: positive_bool_arg(args.dump_all),
         rust_features: args.rust_features,
         use_oxidized: None,
+        // CLI args don't carry lane routing; it's a yaml-only config.
+        lane_routing: None,
     }
 }
 

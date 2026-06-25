@@ -30,47 +30,77 @@ pub(crate) fn parse(
     ]);
     let (funcs, skips) = IrValueOrSkip::split(items);
     let funcs = sort_and_add_func_id(funcs);
-    validate_frb_threads(&funcs)?;
+    validate_frb_threads(&funcs, config)?;
     Ok((funcs, skips))
 }
 
-/// Hybrid enforcement for `#[frb(thread = ...)]` (the executor routing lane).
+/// Optional enforcement for the `#[frb(thread = ...)]` executor-routing lane,
+/// driven entirely by the embedder's `lane_routing` config — FRB assigns no
+/// meaning to lanes itself.
 ///
-/// A function that may touch live CRDT/session state — it runs on the main
-/// thread via `sync`, OR carries a session-handle argument — MUST declare a
-/// thread so the custom executor routes it to the right worker. Pure getters
-/// may omit it and default to `Thread::Main`.
+/// With config present it errors when an annotation names a lane outside the
+/// configured set, and when a function matching `require_annotation_when`
+/// carries no annotation. Without config it is a no-op (any lane key accepted,
+/// nothing required).
 ///
-/// This runs as a post-parse pass (not inside per-function parsing) because an
-/// error raised during `Parser::parse_function` with `stop_on_error=false` is
-/// swallowed into a silent function *skip*, which would drop the offending
-/// functions instead of failing the build. Returning the error here propagates
-/// it to the top level.
-fn validate_frb_threads(funcs: &[MirFunc]) -> anyhow::Result<()> {
-    const SESSION_HANDLE_ARGS: &[&str] =
-        &["session_id", "drive_id", "browser_id", "wizard_id"];
+/// Runs as a post-parse pass (not inside per-function parsing) because an error
+/// raised with `stop_on_error=false` is swallowed into a silent function *skip*,
+/// which would drop the offending functions instead of failing the build.
+/// Returning the error here propagates it to the top level.
+fn validate_frb_threads(
+    funcs: &[MirFunc],
+    config: &ParserMirInternalConfig,
+) -> anyhow::Result<()> {
+    let Some(lane_routing) = &config.lane_routing else {
+        return Ok(());
+    };
 
-    let offenders = funcs
-        .iter()
-        .filter(|func| func.thread.is_none())
-        .filter(|func| {
-            let is_sync = matches!(func.mode, MirFuncMode::Sync);
-            let has_session_arg = func.inputs.iter().any(|input| {
-                SESSION_HANDLE_ARGS.contains(&input.inner.name.rust_style(true).as_str())
-            });
-            is_sync || has_session_arg
-        })
-        .map(|func| func.name.rust_style(true))
-        .collect_vec();
+    // 1. Lane-name validation: every annotation must name `Main` or a configured lane.
+    if let Some(lanes) = &lane_routing.lanes {
+        for func in funcs {
+            if let Some(lane) = &func.thread {
+                if lane != "Main" && !lanes.iter().any(|l| l == lane) {
+                    bail!(
+                        "function `{}` is annotated `#[frb(thread = {lane})]`, but `{lane}` \
+                         is not a configured lane; valid lanes: Main, {}",
+                        func.name.rust_style(true),
+                        lanes.join(", "),
+                    );
+                }
+            }
+        }
+    }
 
-    if !offenders.is_empty() {
-        bail!(
-            "the following functions may touch live CRDT/session state (they are \
-             `sync` or carry a session/drive/browser/wizard id) but have no \
-             `#[frb(thread = ...)]` annotation; add \
-             `#[frb(thread = Main|Loro|Export)]` to each so the custom \
-             executor routes it to the correct worker: {offenders:?}"
-        );
+    // 2. Required-annotation policy.
+    if let Some(require) = &lane_routing.require_annotation_when {
+        let require_sync = require.sync.unwrap_or(false);
+        let param_named = require.param_named.clone().unwrap_or_default();
+        let offenders = funcs
+            .iter()
+            .filter(|func| func.thread.is_none())
+            .filter(|func| {
+                let is_sync = require_sync && matches!(func.mode, MirFuncMode::Sync);
+                let has_named_param = func
+                    .inputs
+                    .iter()
+                    .any(|input| param_named.contains(&input.inner.name.rust_style(true)));
+                is_sync || has_named_param
+            })
+            .map(|func| func.name.rust_style(true))
+            .collect_vec();
+
+        if !offenders.is_empty() {
+            let lanes_hint = lane_routing
+                .lanes
+                .as_ref()
+                .map(|lanes| format!("Main|{}", lanes.join("|")))
+                .unwrap_or_else(|| "Main".to_owned());
+            bail!(
+                "these functions match the configured `require_annotation_when` policy but have \
+                 no `#[frb(thread = ...)]` annotation; add `#[frb(thread = {lanes_hint})]` to \
+                 each so the custom executor routes it: {offenders:?}"
+            );
+        }
     }
 
     Ok(())

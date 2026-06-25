@@ -47,11 +47,41 @@ pub struct Config {
     pub dump_all: Option<bool>,
     pub rust_features: Option<Vec<String>>,
     pub use_oxidized: Option<bool>,
+    pub lane_routing: Option<LaneRoutingConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct MetaConfig {
     pub watch: bool,
+}
+
+/// Optional policy for the `#[frb(thread = <lane>)]` executor-routing feature.
+///
+/// Flutter Rust Bridge itself assigns no meaning to worker lanes — it only
+/// stamps the lane key onto `TaskInfo.thread` and hands it to the embedder's
+/// `ThreadRouter`. This config lets the embedder declare, in
+/// `flutter_rust_bridge.yaml`, which lane keys are valid and which functions
+/// must be annotated, so codegen can enforce it with no hardcoded domain
+/// knowledge. When absent, codegen accepts any lane key and enforces nothing.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LaneRoutingConfig {
+    /// Valid worker-lane keys for `#[frb(thread = <key>)]` (besides the implicit
+    /// `Main`). When set, codegen errors on any annotation outside this set.
+    pub lanes: Option<Vec<String>>,
+    /// When set, codegen errors if a function matching the predicate has no
+    /// `#[frb(thread = ...)]` annotation.
+    pub require_annotation_when: Option<RequireAnnotationWhen>,
+}
+
+/// Predicate selecting functions that must declare a `#[frb(thread = ...)]` lane.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RequireAnnotationWhen {
+    /// Require a lane on every `#[frb(sync)]` function.
+    pub sync: Option<bool>,
+    /// Require a lane on any function with a parameter named one of these.
+    pub param_named: Option<Vec<String>>,
 }
 
 macro_rules! generate_merge {
@@ -111,4 +141,5 @@ generate_merge!(
     dump_all,
     rust_features,
     use_oxidized,
+    lane_routing,
 );

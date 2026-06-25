@@ -76,31 +76,29 @@ pub struct TaskInfo {
     pub debug_name: &'static str,
     /// The call mode of this function.
     pub mode: FfiCallMode,
-    /// Which executor thread/worker lane this call must run on.
-    /// A custom [`super::executor::Executor`] uses this as a typed routing key
+    /// Which executor lane this call must run on.
+    /// A custom [`super::executor::Executor`] uses this as a routing key
     /// instead of matching on [`TaskInfo::debug_name`]. The default executor
     /// ignores it. Stamped by codegen from `#[frb(thread = ...)]`; defaults to
     /// [`Thread::Main`] when unset.
     pub thread: Thread,
 }
 
-/// Typed routing key for a custom [`super::executor::Executor`].
+/// Routing key for a custom [`super::executor::Executor`].
 ///
 /// The default executor ignores this. A custom executor maps each call to a
-/// thread/worker lane, so the routing decision is a typed enum match
-/// rather than a string comparison on [`TaskInfo::debug_name`].
+/// worker lane. FRB assigns no meaning to a lane beyond "not the caller
+/// thread" — the embedder's `ThreadRouter` owns what each key denotes.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub enum Thread {
-    /// Pure, side-effect-free getters; safe to run on the caller (main) thread.
-    /// Also config/global setters that touch no CRDT state, and `!Send`
-    /// main-thread browser APIs (e.g. the sync WebSocket), which cannot leave
-    /// the main thread.
+    /// Run inline on the caller (main thread) — pure getters and config setters
+    /// that need no dedicated worker lane. The default when `thread` is unset.
     #[default]
     Main,
-    /// Touches live CRDT/session state; must run on the single owner worker.
-    Loro,
-    /// Render-from-snapshot (pdf / thumbnail); no live-state handle.
-    Export,
+    /// Run on the embedder-defined worker lane identified by this opaque key.
+    /// Stamped from `#[frb(thread = <Ident>)]` (the ident becomes the key); the
+    /// embedder's `ThreadRouter` maps the key to a concrete pool.
+    Worker(&'static str),
 }
 
 /// The types of return values for a particular Rust function.
