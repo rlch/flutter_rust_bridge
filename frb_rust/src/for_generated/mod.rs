@@ -26,10 +26,12 @@ pub use crate::handler::error_listener::ErrorListener;
 pub use crate::handler::executor::Executor;
 pub use crate::handler::handler::{FfiCallMode, TaskInfo, Thread};
 pub use crate::handler::handler::{TaskContext, TaskRetFutTrait};
-pub use crate::handler::implementation::thread_executor::{ThreadExecutor, ThreadJob, ThreadRouter};
 pub use crate::handler::implementation::error_listener::NoOpErrorListener;
 pub use crate::handler::implementation::executor::SimpleExecutor;
 pub use crate::handler::implementation::handler::SimpleHandler;
+pub use crate::handler::implementation::thread_executor::{
+    ThreadExecutor, ThreadJob, ThreadRouter,
+};
 pub use crate::lifetimeable::lifetime_changer::{
     ouroboros_change_lifetime, ouroboros_change_lifetime_mut,
 };
@@ -63,9 +65,9 @@ pub use crate::rust_auto_opaque::rust2dart_explicit::rust_auto_opaque_explicit_e
 pub use crate::rust_auto_opaque::{inner::RustAutoOpaqueInner, RustAutoOpaqueBase};
 pub use crate::rust_opaque::{dart2rust::decode_rust_opaque_nom, RustOpaqueBase};
 pub use crate::stream::stream_sink::StreamSinkBase;
-pub use crate::thread_pool::{BaseThreadPool, SimpleThreadPool};
 #[cfg(all(feature = "rust-async", not(target_family = "wasm")))]
 pub use crate::thread_pool::SingleThreadAsyncLane;
+pub use crate::thread_pool::{BaseThreadPool, SimpleThreadPool};
 #[cfg(target_family = "wasm")]
 pub use crate::web_transfer::transfer_closure::TransferClosure;
 #[cfg(feature = "anyhow")]

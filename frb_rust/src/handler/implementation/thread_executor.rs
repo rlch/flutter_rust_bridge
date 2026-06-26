@@ -51,8 +51,7 @@ pub trait ThreadRouter {
 #[cfg(not(target_family = "wasm"))]
 pub type ThreadJob = Box<dyn FnOnce() + Send + 'static>;
 #[cfg(target_family = "wasm")]
-pub type ThreadJob =
-    crate::web_transfer::transfer_closure::TransferClosure<wasm_bindgen::JsValue>;
+pub type ThreadJob = crate::web_transfer::transfer_closure::TransferClosure<wasm_bindgen::JsValue>;
 
 /// Build a [`ThreadJob`] from a `transfer!`-style closure. On native it boxes
 /// the closure into `Box<dyn FnOnce() + Send>`; on web `transfer!` already
@@ -73,7 +72,9 @@ macro_rules! thread_job {
 
 /// An [`Executor`] that routes calls to per-thread lanes.
 ///
-/// - `execute_normal` / `execute_async`: build the same closure
+/// - wasm `Thread::Main` normal/async calls run inline on the caller so app
+///   startup does not prewarm a general worker pool for main-thread-safe work.
+/// - other `execute_normal` / `execute_async` calls build the same closure
 ///   [`SimpleExecutor`](super::executor::SimpleExecutor) builds, then route it
 ///   to the `thread`'s lane via [`ThreadRouter::execute_on`].
 /// - `execute_sync`: run inline on the caller (main thread), exactly like
@@ -111,6 +112,26 @@ impl<EL: ErrorListener + Sync, P: ThreadRouter> Executor for ThreadExecutor<EL, 
         let thread = task_info.thread;
         let TaskInfo { port, .. } = task_info;
         let port: MessagePort = port.unwrap();
+
+        #[cfg(target_family = "wasm")]
+        if thread == Thread::Main {
+            #[allow(clippy::clone_on_copy)]
+            let port2 = port.clone();
+            let thread_result = PanicBacktrace::catch_unwind(AssertUnwindSafe(|| {
+                #[allow(clippy::clone_on_copy)]
+                let sender = Rust2DartSender::new(Channel::new(port2.clone()));
+                let task_context = TaskContext::new();
+
+                let ret = task(task_context);
+
+                ThreadExecuteUtils::handle_result::<Rust2DartCodec, _>(ret, sender, el2);
+            }));
+
+            if let Err(error) = thread_result {
+                handle_non_sync_panic_error::<Rust2DartCodec>(el, port, error);
+            }
+            return;
+        }
 
         // Identical body to SimpleExecutor::execute_normal (executor.rs), only
         // the destination differs: route to the thread lane instead of "any
@@ -172,6 +193,32 @@ impl<EL: ErrorListener + Sync, P: ThreadRouter> Executor for ThreadExecutor<EL, 
         let thread = task_info.thread;
         let TaskInfo { port, .. } = task_info;
         let port: MessagePort = port.unwrap();
+
+        #[cfg(target_family = "wasm")]
+        if thread == Thread::Main {
+            spawn_local_compat(async move {
+                #[allow(clippy::clone_on_copy)]
+                let port2 = port.clone();
+
+                let async_result = AssertUnwindSafe(async {
+                    #[allow(clippy::clone_on_copy)]
+                    let sender = Rust2DartSender::new(Channel::new(port2.clone()));
+                    let task_context = TaskContext::new();
+
+                    let ret = task(task_context).await;
+
+                    ThreadExecuteUtils::handle_result::<Rust2DartCodec, _>(ret, sender, el2);
+                })
+                .catch_unwind()
+                .await;
+
+                if let Err(err) = async_result {
+                    let err = CatchUnwindWithBacktrace::new(err, PanicBacktrace::take_last());
+                    handle_non_sync_panic_error::<Rust2DartCodec>(el, port, err);
+                }
+            });
+            return;
+        }
 
         // Off-main async: transfer the `Send` closure (capturing the
         // transferable `MessagePort`, exactly like the normal branch) to the
@@ -262,7 +309,12 @@ impl ThreadExecuteUtils {
 // This routes two async tasks to one single-worker lane with a cross-task
 // dependency: cooperative scheduling completes both; a parking driver would
 // deadlock (A holds the worker awaiting B, which can never start).
-#[cfg(all(test, feature = "rust-async", feature = "thread-pool", not(target_family = "wasm")))]
+#[cfg(all(
+    test,
+    feature = "rust-async",
+    feature = "thread-pool",
+    not(target_family = "wasm")
+))]
 mod single_worker_lane_pinning_tests {
     use super::*;
     use crate::codec::dco::DcoCodec;
